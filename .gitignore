@@ -1,4 +1,4 @@
-credentials.json
+dataset_construction/credentials.json
 .ipynb_checkpoints/
-token.pickle
+dataset_construction/token.pickle
 data/
