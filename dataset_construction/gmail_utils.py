@@ -14,6 +14,7 @@ import urllib
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 MSG_DELIMITER = "On\s*\w{3},\s*\w{3}\s*\d+,\s*\d+\s*at\s*\d+:\d+\s*(?:A|P)M,\s*.+?>\s*wrote:"
+EMAIL_RE = "([\w\d._]+)@gmail.com"
 
 
 # From Google API examples
@@ -130,7 +131,7 @@ class GmailMessage(object):
 
     @property
     def author_handle(self):
-        return self.author.split()[1].split("@")[0][1:]
+        return re.search(EMAIL_RE, self.author).groups(0)
 
     def __str__(self):
         return f"[{self.author} -- {self.date}\n\n{self.payload}]"
