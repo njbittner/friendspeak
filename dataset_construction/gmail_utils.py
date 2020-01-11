@@ -140,6 +140,7 @@ class GmailMessage(object):
         return self.__str__()
 
 
+
 def decode_raw_msg(raw_msg):
     l = base64.urlsafe_b64decode(raw_msg['raw'])
     m = email.message_from_string(l.decode("utf-8"))
@@ -165,6 +166,50 @@ def extract_msg(msg):
         cutoff = cutoff_match.span()[0]
         msg_slice = msg_payload[:cutoff]
     return GmailMessage(msg_author, msg_date, urllib.parse.unquote(re.sub("=(\w{2})", "%\g<1>", msg_slice)))
+
+
+encounterd_mimetypes = {}
+def add_to_encoutnered(mt):
+    global  encounterd_mimetypes
+    try:
+        encounterd_mimetypes[mt] +=1
+    except KeyError:
+        encounterd_mimetypes[mt] = 0
+
+
+def get_header(header_list, key):
+    for header in header_list:
+        if header['name'] == key:
+            return header['value']
+
+
+def get_charset_for_text_part(text_part):
+    headers = text_part['headers']
+    return get_header(headers, 'Content-Type').split("charset=")[1]
+
+
+def extract_text_from_text_part(part):
+    charset = get_charset_for_text_part(part)
+    return base64.urlsafe_b64decode(part['body']['data']).decode(charset)
+
+
+def extract_msg_from_parts(parts, all=''):
+    for p in parts:
+        if p['mimeType'] == 'text/plain':
+            return all + extract_text_from_text_part(p)
+        elif p['mimeType'].startswith('multipart'):
+            return extract_msg_from_parts(p, all='')
+        else:
+            return all
+
+
+def extract_msg_text_content(msg):
+    msg_payload = msg['payload']
+    mt = msg_payload['mimeType']
+    add_to_encoutnered(mt)
+    msg_parts = msg_payload['parts']
+    text_content = extract_msg_from_parts(msg_parts)
+    print(text_content)
 
 
 def get_msg_ids_from_thread(threads_container, thread_id):
