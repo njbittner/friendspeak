@@ -13,8 +13,8 @@ import urllib
 
 
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
-MSG_DELIMITER = "On\s*\w{3},\s*\w{3}\s*\d+,\s*\d+\s*at\s*\d+:\d+\s*(?:A|P)M,\s*.+?>\s*wrote:"
-EMAIL_RE = "([\w\d._]+)@gmail.com"
+EMAIL_RE = "([\w\d._]+@\w+\.\w+)"
+MSG_DELIMITER = f"(?:\n>\s)?On.+?{EMAIL_RE}.+?wrote:"
 
 
 # From Google API examples
@@ -184,13 +184,27 @@ def get_header(header_list, key):
 
 
 def get_charset_for_text_part(text_part):
-    headers = text_part['headers']
-    return get_header(headers, 'Content-Type').split("charset=")[1]
+    # apparently Google's api converts these to always be utf-8 encoded anyway.
+    return "UTF-8"
+    # headers = text_part['headers']
+    # return get_header(headers, 'Content-Type').split("charset=")[1].split(";")[0]
 
 
 def extract_text_from_text_part(part):
     charset = get_charset_for_text_part(part)
     return base64.urlsafe_b64decode(part['body']['data']).decode(charset)
+
+from typing import NamedTuple
+class Sender:
+    def __init__(self, fromfield:str):
+        self.fullname = fromfield
+        self.email = re.search(EMAIL_RE, fromfield).group()
+        self.handle = self.email.split("@")[0]
+
+def get_sender(msg):
+    payload = msg['payload']
+    sender = get_header(payload['headers'], "From")
+    return Sender(sender)
 
 
 def extract_msg_from_parts(parts, all=''):
@@ -198,7 +212,7 @@ def extract_msg_from_parts(parts, all=''):
         if p['mimeType'] == 'text/plain':
             return all + extract_text_from_text_part(p)
         elif p['mimeType'].startswith('multipart'):
-            return extract_msg_from_parts(p, all='')
+            return extract_msg_from_parts(p['parts'], all='')
         else:
             return all
 
@@ -207,10 +221,17 @@ def extract_msg_text_content(msg):
     msg_payload = msg['payload']
     mt = msg_payload['mimeType']
     add_to_encoutnered(mt)
-    msg_parts = msg_payload['parts']
-    text_content = extract_msg_from_parts(msg_parts)
-    print(text_content)
+    if mt.startswith("multipart"):
+        msg_parts = msg_payload['parts']
+        text_content = extract_msg_from_parts(msg_parts)
+    else:
+        text_content = extract_text_from_text_part(msg_payload)
+    cutoff_match = re.search(MSG_DELIMITER, text_content, flags=re.DOTALL)
+    if cutoff_match:
+        cutoff = cutoff_match.span()[0]
+        text_content = text_content[:cutoff]
+    return text_content
 
 
-def get_msg_ids_from_thread(threads_container, thread_id):
+def get_msgs_from_thread(threads_container, thread_id):
     return threads_container.get(userId='me', id=thread_id).execute()['messages']
